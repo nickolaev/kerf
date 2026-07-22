@@ -18,13 +18,13 @@ Kernel loading subcommand implementation using kexec_file_load syscall.
 
 import ctypes
 import os
-import platform
 import sys
 from pathlib import Path
 from typing import Optional
 
 import click
 
+from ..architecture import get_kexec_file_load_syscall
 from ..utils import get_instance_id_from_name, get_instance_name_from_id
 
 
@@ -39,14 +39,6 @@ KEXEC_MK_ID_SHIFT = 5
 def KEXEC_MK_ID(id: int) -> int:  # pylint: disable=invalid-name
     """Generate KEXEC_MK_ID flag value from kernel ID."""
     return (id << KEXEC_MK_ID_SHIFT) & KEXEC_MK_ID_MASK
-
-
-# Syscall numbers (architecture-dependent)
-# For x86_64: 320, for x86: 320, for ARM64: 294, for ARM: 382
-SYS_KEXEC_FILE_LOAD_X86_64 = 320
-SYS_KEXEC_FILE_LOAD_ARM64 = 294
-SYS_KEXEC_FILE_LOAD_ARM = 382
-SYS_KEXEC_FILE_LOAD_X86 = 320
 
 
 def build_ip_param(
@@ -91,24 +83,6 @@ def build_ip_param(
         "off",                # autoconf (off for static)
     ]
     return "ip=" + ":".join(parts)
-
-
-def get_kexec_file_load_syscall():
-    """Get the kexec_file_load syscall number for current architecture."""
-    arch = platform.machine().lower()
-    if arch in ("x86_64", "amd64"):
-        return SYS_KEXEC_FILE_LOAD_X86_64
-    if arch in ("aarch64", "arm64"):
-        return SYS_KEXEC_FILE_LOAD_ARM64
-    if arch.startswith("arm"):
-        return SYS_KEXEC_FILE_LOAD_ARM
-    if arch in ("i386", "i686", "x86"):
-        return SYS_KEXEC_FILE_LOAD_X86
-    # Default to x86_64, but warn
-    click.echo(
-        f"Warning: Unknown architecture '{arch}', assuming x86_64 syscall number", err=True
-    )
-    return SYS_KEXEC_FILE_LOAD_X86_64
 
 
 def kexec_file_load(

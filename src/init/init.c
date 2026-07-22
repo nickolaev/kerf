@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 
 #define CMDLINE_PATH "/proc/cmdline"
@@ -45,13 +46,30 @@ static volatile int child_exited = 0;
 static volatile int child_exit_status = 0;
 static char console_device[MAX_CONSOLE_LEN];
 
+static void write_all(int fd, const char *buf, size_t len)
+{
+    while (len > 0) {
+        ssize_t written = write(fd, buf, len);
+
+        if (written < 0) {
+            if (errno == EINTR)
+                continue;
+            return;
+        }
+        if (written == 0)
+            return;
+        buf += written;
+        len -= written;
+    }
+}
+
 static void log_msg(const char *msg)
 {
     int fd = open("/dev/kmsg", O_WRONLY);
     if (fd >= 0) {
-        write(fd, "kerf-init: ", 11);
-        write(fd, msg, strlen(msg));
-        write(fd, "\n", 1);
+        write_all(fd, "kerf-init: ", 11);
+        write_all(fd, msg, strlen(msg));
+        write_all(fd, "\n", 1);
         close(fd);
     }
 }
@@ -63,19 +81,18 @@ static void log_error(const char *msg)
     log_msg(buf);
 }
 
-static inline uint64_t rdtsc(void)
-{
-    uint32_t lo, hi;
-    asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
-    return ((uint64_t)hi << 32) | lo;
-}
-
 static void log_starting(void)
 {
-    char buf[64];
-    uint64_t tsc = rdtsc();
+    char buf[96];
+    struct timespec now = {0};
 
-    snprintf(buf, sizeof(buf), "starting at TSC %lu", tsc);
+    if (clock_gettime(CLOCK_MONOTONIC, &now) < 0) {
+        log_error("clock_gettime");
+        return;
+    }
+    uint64_t monotonic_ns = (uint64_t)now.tv_sec * 1000000000ULL + now.tv_nsec;
+    snprintf(buf, sizeof(buf), "starting at monotonic_ns %llu",
+             (unsigned long long)monotonic_ns);
     log_msg(buf);
 }
 

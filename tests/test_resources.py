@@ -70,7 +70,7 @@ class TestCPUAllocation:
         # Request CPU that doesn't exist
         requested_cpus = [999]
 
-        with pytest.raises(ResourceError, match="Invalid APIC IDs requested"):
+        with pytest.raises(ResourceError, match="Invalid hardware CPU IDs requested"):
             validate_cpu_allocation(sample_tree, requested_cpus)
 
     def test_validate_cpu_allocation_with_exclusion(self, sample_tree):

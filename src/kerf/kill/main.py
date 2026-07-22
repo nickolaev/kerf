@@ -18,13 +18,13 @@ Kernel shutdown subcommand implementation using reboot syscall with MULTIKERNEL_
 
 import ctypes
 import os
-import platform
 import sys
 from pathlib import Path
 from typing import Optional
 
 import click
 
+from ..architecture import get_reboot_syscall
 from ..models import InstanceState
 from ..utils import get_instance_id_from_name
 
@@ -33,30 +33,6 @@ LINUX_REBOOT_MAGIC1 = 0xfee1dead
 LINUX_REBOOT_MAGIC2 = 672274793  # 0x28121969
 LINUX_REBOOT_CMD_MULTIKERNEL_HALT = 0x4D4B4C48
 LINUX_REBOOT_CMD_MULTIKERNEL_HALT_FORCE = 0x4D4B4C46
-
-SYS_REBOOT_X86_64 = 169
-SYS_REBOOT_ARM64 = 142
-SYS_REBOOT_ARM = 88
-SYS_REBOOT_X86 = 88
-
-
-def get_reboot_syscall():
-    """Get the reboot syscall number for current architecture."""
-    arch = platform.machine().lower()
-    if arch in ('x86_64', 'amd64'):
-        return SYS_REBOOT_X86_64
-    if arch in ('aarch64', 'arm64'):
-        return SYS_REBOOT_ARM64
-    if arch.startswith('arm'):
-        return SYS_REBOOT_ARM
-    if arch in ('i386', 'i686', 'x86'):
-        return SYS_REBOOT_X86
-    click.echo(
-        f"Warning: Unknown architecture '{arch}', assuming x86_64 syscall number",
-        err=True
-    )
-    return SYS_REBOOT_X86_64
-
 
 class MultikernelBootArgs(ctypes.Structure):
     """Structure for multikernel boot arguments."""

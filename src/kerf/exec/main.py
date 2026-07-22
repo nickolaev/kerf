@@ -18,14 +18,14 @@ Kernel execution subcommand implementation using reboot syscall with MULTIKERNEL
 
 import ctypes
 import os
-import platform
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
 import click
-import rdtsc
 
+from ..architecture import get_reboot_syscall
 from ..models import InstanceState
 from ..utils import get_instance_id_from_name
 
@@ -33,28 +33,6 @@ from ..utils import get_instance_id_from_name
 LINUX_REBOOT_MAGIC1 = 0xFEE1DEAD
 LINUX_REBOOT_MAGIC2 = 672274793  # 0x28121969
 LINUX_REBOOT_CMD_MULTIKERNEL = 0x4D4B4C49
-
-SYS_REBOOT_X86_64 = 169
-SYS_REBOOT_ARM64 = 142
-SYS_REBOOT_ARM = 88
-SYS_REBOOT_X86 = 88
-
-def get_reboot_syscall():
-    """Get the reboot syscall number for current architecture."""
-    arch = platform.machine().lower()
-    if arch in ("x86_64", "amd64"):
-        return SYS_REBOOT_X86_64
-    if arch in ("aarch64", "arm64"):
-        return SYS_REBOOT_ARM64
-    if arch.startswith("arm"):
-        return SYS_REBOOT_ARM
-    if arch in ("i386", "i686", "x86"):
-        return SYS_REBOOT_X86
-    click.echo(
-        f"Warning: Unknown architecture '{arch}', assuming x86_64 syscall number", err=True
-    )
-    return SYS_REBOOT_X86_64
-
 
 class MultikernelBootArgs(ctypes.Structure):
     """Structure for multikernel boot arguments."""
@@ -211,8 +189,8 @@ def exec_cmd(name: Optional[str], id: Optional[int], attach_console: bool, verbo
             click.echo(f"✓ Kernel image found for instance '{instance_name}'")
             click.echo(f"Instance ID to boot: {instance_id}")
             click.echo(f"Using reboot syscall with command: 0x{LINUX_REBOOT_CMD_MULTIKERNEL:x}")
-            tsc = rdtsc.get_cycles()
-            click.echo(f"Calling reboot syscall at TSC {tsc}")
+            monotonic_ns = time.monotonic_ns()
+            click.echo(f"Calling reboot syscall at monotonic_ns {monotonic_ns}")
         else:
             click.echo(f"Booting instance '{instance_name}' (ID: {instance_id})...")
 

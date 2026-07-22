@@ -137,7 +137,7 @@ def _allocate_spread(
                 numa_cpu_lists[numa_node_id] = sorted(numa_cpus)
 
         if not numa_cpu_lists:
-            raise ResourceError(f"No available APIC IDs in specified NUMA nodes: {numa_nodes}")
+            raise ResourceError(f"No available CPU IDs in specified NUMA nodes: {numa_nodes}")
 
         allocated = []
         numa_indices = {node_id: 0 for node_id in numa_cpu_lists}
@@ -187,7 +187,7 @@ def _allocate_local(
         if len(numa_cpus) >= count:
             return sorted(numa_cpus[:count])
         raise ResourceError(
-            f"Not enough APIC IDs in NUMA node {numa_node_id}: "
+            f"Not enough CPU IDs in NUMA node {numa_node_id}: "
             f"requested {count}, but only {len(numa_cpus)} available"
         )
 
@@ -200,7 +200,7 @@ def _allocate_local(
         if len(numa_cpus) >= count:
             return sorted(numa_cpus[:count])
 
-    raise ResourceError(f"No single NUMA node has {count} available APIC IDs for 'local' affinity")
+    raise ResourceError(f"No single NUMA node has {count} available CPU IDs for 'local' affinity")
 
 
 def allocate_cpus_from_pool(
@@ -236,11 +236,11 @@ def allocate_cpus_from_pool(
     if len(available) < count:
         if numa_nodes:
             raise ResourceError(
-                f"Not enough APIC IDs available in NUMA nodes {numa_nodes}: "
+                f"Not enough CPU IDs available in NUMA nodes {numa_nodes}: "
                 f"requested {count}, but only {len(available)} available"
             )
         raise ResourceError(
-            f"Not enough APIC IDs available: requested {count}, "
+            f"Not enough CPU IDs available: requested {count}, "
             f"but only {len(available)} available in pool"
         )
 
@@ -399,8 +399,8 @@ def dump_overlay_for_debug(
 @click.option(
     "--cpus",
     "-c",
-    help='Explicit APIC ID allocation (e.g., "128" for APIC ID 128, "128-134" for range, '
-    '"128,130,132" for list). Use physical APIC IDs, not logical CPU numbers. '
+    help='Explicit hardware CPU ID allocation (e.g., "1" for CPU ID 1, "1-3" for range, '
+    '"1,2,3" for list). Uses APIC IDs on x86 and hart IDs on RISC-V. '
     'Mutually exclusive with --cpu-count',
 )
 @click.option(
@@ -548,7 +548,7 @@ def create(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             try:
                 cpu_spec_value = parse_cpu_spec(cpus)
             except ValueError as e:
-                click.echo(f"Error: Invalid APIC ID specification '{cpus}': {e}", err=True)
+                click.echo(f"Error: Invalid hardware CPU ID specification '{cpus}': {e}", err=True)
                 sys.exit(2)
 
         # Parse memory specification

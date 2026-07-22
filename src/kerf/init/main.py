@@ -36,6 +36,7 @@ except ImportError:
     pyudev = None
 
 from ..baseline import BaselineManager
+from ..architecture import cpu_id_label, get_system_cpu_ids
 from ..create.main import parse_cpu_spec, parse_device_list, parse_memory_spec
 from ..dtc.parser import DeviceTreeParser
 from ..lazy_cma import LAZY_CMA_DEVICE, allocate_multikernel_pool
@@ -347,33 +348,10 @@ def get_total_cpus_from_system() -> Optional[int]:
     return None
 
 
-def get_valid_apic_ids_from_system() -> Optional[set]:
-    """
-    Get set of valid APIC IDs from the system via /proc/cpuinfo.
-    Returns set of valid APIC IDs or None if not available.
-    """
-    try:
-        cpuinfo_path = Path('/proc/cpuinfo')
-        if not cpuinfo_path.exists():
-            return None
-
-        apic_ids = set()
-        with open(cpuinfo_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                if line.startswith('apicid'):
-                    parts = line.split(':')
-                    if len(parts) == 2:
-                        try:
-                            apic_id = int(parts[1].strip())
-                            apic_ids.add(apic_id)
-                        except ValueError:
-                            pass
-
-        return apic_ids if apic_ids else None
-    except (OSError, IOError):
-        pass
-
-    return None
+def get_valid_cpu_ids_from_system() -> Optional[set]:
+    """Return the architecture's hardware CPU IDs, if discoverable."""
+    cpu_ids = get_system_cpu_ids()
+    return cpu_ids or None
 
 
 def build_baseline_from_cmdline(
@@ -405,30 +383,31 @@ def build_baseline_from_cmdline(
     except ValueError as e:
         raise ValueError(f"Invalid CPU specification '{cpus}': {e}") from e
 
-    # Validate against valid APIC IDs on the system
-    valid_apic_ids = get_valid_apic_ids_from_system()
-    if valid_apic_ids is None:
+    # Validate against the architecture's hardware CPU IDs.
+    id_label = cpu_id_label()
+    valid_cpu_ids = get_valid_cpu_ids_from_system()
+    if valid_cpu_ids is None:
         raise KernelInterfaceError(
-            "Could not read APIC IDs from /proc/cpuinfo. "
+            f"Could not read {id_label}s from /proc/cpuinfo. "
             "Ensure the system exposes CPU topology information."
         )
 
-    invalid_cpus = set(cpu_list) - valid_apic_ids
+    invalid_cpus = set(cpu_list) - valid_cpu_ids
     if invalid_cpus:
         raise ValueError(
-            f"Invalid APIC ID(s) specified: {sorted(invalid_cpus)}. "
-            f"Valid APIC IDs on this system: {sorted(valid_apic_ids)}"
+            f"Invalid {id_label}(s) specified: {sorted(invalid_cpus)}. "
+            f"Valid {id_label}s on this system: {sorted(valid_cpu_ids)}"
         )
 
-    # Total CPUs is based on the max APIC ID + 1 for sizing purposes
-    total_cpus = max(valid_apic_ids) + 1
-    # Host reserved are all valid APIC IDs not in the available list
+    # Total CPUs is based on the maximum hardware ID for sizing purposes.
+    total_cpus = max(valid_cpu_ids) + 1
+    # Host reserved are all valid hardware IDs not in the available list.
     available_cpus = set(cpu_list)
-    host_reserved_cpus = sorted(list(valid_apic_ids - available_cpus))
+    host_reserved_cpus = sorted(list(valid_cpu_ids - available_cpus))
 
     if 0 in available_cpus and len(host_reserved_cpus) == 0:
         if verbose:
-            click.echo("Warning: APIC ID 0 is in available list but no host-reserved CPUs. Moving APIC ID 0 to host-reserved.", err=True)
+            click.echo(f"Warning: {id_label} 0 is in available list but no host-reserved CPUs. Moving {id_label} 0 to host-reserved.", err=True)
         available_cpus.discard(0)
         host_reserved_cpus = [0]
         cpu_list = sorted(list(available_cpus))
@@ -463,10 +442,10 @@ def build_baseline_from_cmdline(
     total_bytes = memory_pool_base + memory_pool_bytes
     host_reserved_bytes = memory_pool_base
     if verbose:
-        click.echo(f"Parsed APIC ID specification: {cpus}")
-        click.echo(f"  Valid APIC IDs on system: {sorted(valid_apic_ids)}")
-        click.echo(f"  Host-reserved APIC IDs: {host_reserved_cpus}")
-        click.echo(f"  Available APIC IDs: {cpu_list}")
+        click.echo(f"Parsed {id_label} specification: {cpus}")
+        click.echo(f"  Valid {id_label}s on system: {sorted(valid_cpu_ids)}")
+        click.echo(f"  Host-reserved {id_label}s: {host_reserved_cpus}")
+        click.echo(f"  Available {id_label}s: {cpu_list}")
         click.echo("Memory pool from /proc/iomem:")
         click.echo(f"  Base: {hex(memory_pool_base)}")
         click.echo(f"  Size: {memory_pool_bytes} bytes ({memory_pool_bytes / (1024**3):.2f} GB)")
@@ -529,7 +508,7 @@ def build_baseline_from_cmdline(
 @click.command()
 @click.pass_context
 @click.option('--input', '-i', help='Input DTS or DTB file containing all resources. Mutually exclusive with --cpus, --memory and --devices. When used, all resources must come from the file.')
-@click.option('--cpus', '-c', help='APIC ID specification for baseline (e.g., "128-134" or "128,130,132"). Use physical APIC IDs, not logical CPU numbers. Mutually exclusive with --input. Memory comes from --memory or an existing pool in /proc/iomem.')
+@click.option('--cpus', '-c', help='Hardware CPU ID specification for baseline (e.g., "1-3" or "1,2,3"). Uses APIC IDs on x86 and hart IDs on RISC-V. Mutually exclusive with --input. Memory comes from --memory or an existing pool in /proc/iomem.')
 @click.option('--memory', '-m', help='Memory pool size to allocate at runtime via /dev/lazy_cma (e.g., "1GB", "512MB"). If omitted, an existing pool is discovered from /proc/iomem. Mutually exclusive with --input.')
 @click.option('--devices', '-d', help='Device names (comma-separated, e.g., "enp9s0_dev,nvme0"). Mutually exclusive with --input. Creates minimal device entries in baseline.')
 @click.option('--dry-run', is_flag=True, help='Validate without applying')
